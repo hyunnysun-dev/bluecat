@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Excel 시트 합치기</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a73e8;
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+    }
+
+    .icon { font-size: 1.6rem; }
+
+    .container {
+      display: flex;
+      gap: 16px;
+      padding: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* ── Upload Zone ── */
+    .upload-zone {
+      border: 2px dashed #1a73e8;
+      border-radius: 12px;
+      background: white;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin: 0 20px 0;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      background: #e8f0fe;
+    }
+
+    .upload-zone p { color: #555; margin-top: 8px; font-size: 0.9rem; }
+    .upload-zone .upload-icon { font-size: 2.4rem; }
+
+    #fileInput { display: none; }
+
+    /* ── Panels ── */
+    .panel {
+      flex: 1;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .panel-header {
+      padding: 14px 18px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e0e0e0;
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      background: #1a73e8;
+      color: white;
+      border-radius: 12px;
+      padding: 2px 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      min-width: 26px;
+      text-align: center;
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    /* ── File group ── */
+    .file-group {
+      margin-bottom: 10px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .file-group-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: #f1f3f4;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .file-group-header:hover { background: #e8eaed; }
+
+    .file-group-header .file-icon { font-size: 1.1rem; }
+
+    .file-group-header .file-name {
+      flex: 1;
+      font-weight: 600;
+      font-size: 0.88rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-group-header .select-all-btn {
+      font-size: 0.75rem;
+      color: #1a73e8;
+      background: white;
+      border: 1px solid #1a73e8;
+      border-radius: 4px;
+      padding: 2px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .file-group-header .select-all-btn:hover { background: #e8f0fe; }
+
+    .file-group-header .remove-file-btn {
+      font-size: 0.8rem;
+      color: #d93025;
+      background: white;
+      border: 1px solid #d93025;
+      border-radius: 4px;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+    .file-group-header .remove-file-btn:hover { background: #fce8e6; }
+
+    .file-group-header .chevron {
+      font-size: 0.75rem;
+      transition: transform 0.2s;
+    }
+    .file-group.collapsed .chevron { transform: rotate(-90deg); }
+    .file-group.collapsed .sheet-list { display: none; }
+
+    .sheet-list { padding: 6px 0; }
+
+    .sheet-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 14px 7px 20px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .sheet-item:hover { background: #f8f9ff; }
+    .sheet-item.selected { background: #e8f0fe; }
+
+    .sheet-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: #1a73e8;
+    }
+
+    .sheet-name { font-size: 0.875rem; flex: 1; }
+
+    /* ── Right panel: merged list ── */
+    .merged-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      cursor: grab;
+      transition: box-shadow 0.15s, background 0.15s;
+    }
+    .merged-item:hover { background: #e8f0fe; box-shadow: 0 2px 6px rgba(0,0,0,0.12); }
+    .merged-item.dragging { opacity: 0.4; }
+    .merged-item.drag-over { border: 2px dashed #1a73e8; background: #e8f0fe; }
+
+    .merged-item .order-num {
+      background: #1a73e8;
+      color: white;
+      border-radius: 50%;
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .merged-item .item-info { flex: 1; min-width: 0; }
+    .merged-item .item-sheet { font-weight: 600; font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .merged-item .item-file { font-size: 0.75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .merged-item .remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #999;
+      font-size: 1rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: color 0.15s;
+    }
+    .merged-item .remove-btn:hover { color: #d93025; background: #fce8e6; }
+
+    .drag-handle { color: #aaa; cursor: grab; font-size: 1rem; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #aaa;
+    }
+    .empty-state .empty-icon { font-size: 3rem; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.875rem; }
+
+    /* ── Bottom bar ── */
+    .bottom-bar {
+      padding: 16px 20px;
+      background: white;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .output-name {
+      flex: 1;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .output-name:focus { border-color: #1a73e8; }
+
+    .btn {
+      padding: 9px 22px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s, opacity 0.2s;
+    }
+
+    .btn-primary {
+      background: #1a73e8;
+      color: white;
+    }
+    .btn-primary:hover { background: #1557b0; }
+    .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+
+    .btn-danger {
+      background: #d93025;
+      color: white;
+    }
+    .btn-danger:hover { background: #a50e0e; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: #323232;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 9999;
+      pointer-events: none;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Scrollbar ── */
+    .panel-body::-webkit-scrollbar { width: 6px; }
+    .panel-body::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+    @media (max-width: 768px) {
+      .container { flex-direction: column; padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="icon">📊</span>
+  <h1>Excel 시트 합치기</h1>
+</header>
+
+<!-- Upload zone -->
+<div class="upload-zone" id="uploadZone">
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv" multiple />
+  <div class="upload-icon">📂</div>
+  <strong>클릭하거나 파일을 드래그하여 업로드</strong>
+  <p>Excel 파일(.xlsx, .xls, .xlsm, .csv) 지원 · 여러 파일 동시 선택 가능</p>
+</div>
+
+<div class="container">
+  <!-- Left panel: uploaded files & sheets -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>📁 업로드된 파일 &amp; 시트</span>
+      <span class="badge" id="fileCountBadge">0</span>
+    </div>
+    <div class="panel-body" id="fileListPanel">
+      <div class="empty-state">
+        <div class="empty-icon">📤</div>
+        <p>파일을 업로드하면<br/>파일명과 시트 목록이 표시됩니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right panel: selected sheets for merge -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>✅ 합칠 시트 목록</span>
+      <span class="badge" id="sheetCountBadge">0</span>
+    </div>
+    <div class="panel-body" id="mergeListPanel">
+      <div class="empty-state" id="mergeEmptyState">
+        <div class="empty-icon">📋</div>
+        <p>왼쪽에서 시트를 선택하면<br/>여기에 추가됩니다.<br/><br/>드래그로 순서를 변경할 수 있습니다.</p>
+      </div>
+    </div>
+    <div class="bottom-bar">
+      <input type="text" class="output-name" id="outputName" placeholder="출력 파일명 (기본: merged.xlsx)" />
+      <button class="btn btn-danger" onclick="clearAll()" title="전체 초기화">초기화</button>
+      <button class="btn btn-primary" id="mergeBtn" onclick="mergeAndDownload()" disabled>⬇ 다운로드</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+const files = [];           // { id, name, wb, sheets: [{name}] }
+const mergeList = [];       // { fileId, fileName, sheetName } — ordered
+
+let dragSrcIndex = null;
+
+// ─────────────────────────────────────────────
+// Upload
+// ─────────────────────────────────────────────
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+
+function handleFiles(fileList) {
+  [...fileList].forEach(f => readFile(f));
+  fileInput.value = '';
+}
+
+function readFile(f) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const id = Date.now() + Math.random();
+      files.push({ id, name: f.name, wb, sheets: wb.SheetNames.map(n => ({ name: n })) });
+      renderFileList();
+      showToast(`"${f.name}" 업로드 완료 (${wb.SheetNames.length}개 시트)`);
+    } catch(err) {
+      showToast(`"${f.name}" 읽기 실패: ${err.message}`);
+    }
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+// ─────────────────────────────────────────────
+// Render left panel
+// ─────────────────────────────────────────────
+function renderFileList() {
+  const panel = document.getElementById('fileListPanel');
+  document.getElementById('fileCountBadge').textContent = files.length;
+
+  if (files.length === 0) {
+    panel.innerHTML = `<div class="empty-state"><div class="empty-icon">📤</div><p>파일을 업로드하면<br/>파일명과 시트 목록이 표시됩니다.</p></div>`;
+    return;
+  }
+
+  panel.innerHTML = files.map(file => {
+    const allSelected = file.sheets.every(s => isInMergeList(file.id, s.name));
+    const sheetsHtml = file.sheets.map(s => {
+      const checked = isInMergeList(file.id, s.name);
+      return `
+        <div class="sheet-item ${checked ? 'selected' : ''}"
+             onclick="toggleSheet('${file.id}', '${escHtml(s.name)}', this)">
+          <input type="checkbox" ${checked ? 'checked' : ''}
+                 onclick="event.stopPropagation(); toggleSheet('${file.id}', '${escHtml(s.name)}', this.closest('.sheet-item'))" />
+          <span class="sheet-name">📄 ${escHtml(s.name)}</span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="file-group" id="fg-${file.id}">
+        <div class="file-group-header" onclick="toggleCollapse('${file.id}')">
+          <span class="file-icon">📊</span>
+          <span class="file-name" title="${escHtml(file.name)}">${escHtml(file.name)}</span>
+          <button class="select-all-btn" onclick="event.stopPropagation(); selectAllSheets('${file.id}')">
+            ${allSelected ? '전체해제' : '전체선택'}
+          </button>
+          <button class="remove-file-btn" onclick="event.stopPropagation(); removeFile('${file.id}')">삭제</button>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="sheet-list">${sheetsHtml}</div>
+      </div>`;
+  }).join('');
+}
+
+function toggleCollapse(fileId) {
+  document.getElementById('fg-' + fileId).classList.toggle('collapsed');
+}
+
+function isInMergeList(fileId, sheetName) {
+  return mergeList.some(m => m.fileId == fileId && m.sheetName === sheetName);
+}
+
+// ─────────────────────────────────────────────
+// Select / Deselect sheet
+// ─────────────────────────────────────────────
+function toggleSheet(fileId, sheetName, el) {
+  const idx = mergeList.findIndex(m => m.fileId == fileId && m.sheetName === sheetName);
+  const file = files.find(f => f.id == fileId);
+  if (idx === -1) {
+    mergeList.push({ fileId, fileName: file.name, sheetName });
+  } else {
+    mergeList.splice(idx, 1);
+  }
+  renderFileList();
+  renderMergeList();
+}
+
+function selectAllSheets(fileId) {
+  const file = files.find(f => f.id == fileId);
+  const allSelected = file.sheets.every(s => isInMergeList(fileId, s.name));
+  if (allSelected) {
+    // deselect all
+    for (let i = mergeList.length - 1; i >= 0; i--) {
+      if (mergeList[i].fileId == fileId) mergeList.splice(i, 1);
+    }
+  } else {
+    // add missing
+    file.sheets.forEach(s => {
+      if (!isInMergeList(fileId, s.name)) {
+        mergeList.push({ fileId, fileName: file.name, sheetName: s.name });
+      }
+    });
+  }
+  renderFileList();
+  renderMergeList();
+}
+
+function removeFile(fileId) {
+  const idx = files.findIndex(f => f.id == fileId);
+  if (idx === -1) return;
+  // Remove from merge list
+  for (let i = mergeList.length - 1; i >= 0; i--) {
+    if (mergeList[i].fileId == fileId) mergeList.splice(i, 1);
+  }
+  files.splice(idx, 1);
+  renderFileList();
+  renderMergeList();
+}
+
+// ─────────────────────────────────────────────
+// Render right panel
+// ─────────────────────────────────────────────
+function renderMergeList() {
+  const panel = document.getElementById('mergeListPanel');
+  const emptyState = document.getElementById('mergeEmptyState');
+  document.getElementById('sheetCountBadge').textContent = mergeList.length;
+  document.getElementById('mergeBtn').disabled = mergeList.length === 0;
+
+  if (mergeList.length === 0) {
+    panel.innerHTML = `<div class="empty-state" id="mergeEmptyState">
+      <div class="empty-icon">📋</div>
+      <p>왼쪽에서 시트를 선택하면<br/>여기에 추가됩니다.<br/><br/>드래그로 순서를 변경할 수 있습니다.</p>
+    </div>`;
+    return;
+  }
+
+  panel.innerHTML = mergeList.map((m, i) => `
+    <div class="merged-item" draggable="true"
+         data-index="${i}"
+         ondragstart="onDragStart(event, ${i})"
+         ondragover="onDragOver(event, ${i})"
+         ondrop="onDrop(event, ${i})"
+         ondragend="onDragEnd(event)">
+      <span class="drag-handle" title="드래그로 순서 변경">⠿</span>
+      <div class="order-num">${i + 1}</div>
+      <div class="item-info">
+        <div class="item-sheet" title="${escHtml(m.sheetName)}">📄 ${escHtml(m.sheetName)}</div>
+        <div class="item-file" title="${escHtml(m.fileName)}">📊 ${escHtml(m.fileName)}</div>
+      </div>
+      <button class="remove-btn" onclick="removeMergeItem(${i})" title="제거">✕</button>
+    </div>`).join('');
+}
+
+function removeMergeItem(i) {
+  mergeList.splice(i, 1);
+  renderFileList();
+  renderMergeList();
+}
+
+// ─────────────────────────────────────────────
+// Drag & drop reorder
+// ─────────────────────────────────────────────
+function onDragStart(e, i) {
+  dragSrcIndex = i;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragOver(e, i) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.merged-item').forEach(el => el.classList.remove('drag-over'));
+  if (i !== dragSrcIndex) e.currentTarget.classList.add('drag-over');
+}
+
+function onDrop(e, i) {
+  e.preventDefault();
+  if (dragSrcIndex === null || dragSrcIndex === i) return;
+  const [moved] = mergeList.splice(dragSrcIndex, 1);
+  mergeList.splice(i, 0, moved);
+  dragSrcIndex = null;
+  renderMergeList();
+  renderFileList();
+}
+
+function onDragEnd(e) {
+  document.querySelectorAll('.merged-item').forEach(el => {
+    el.classList.remove('dragging', 'drag-over');
+  });
+  dragSrcIndex = null;
+}
+
+// ─────────────────────────────────────────────
+// Merge & Download
+// ─────────────────────────────────────────────
+function mergeAndDownload() {
+  if (mergeList.length === 0) return;
+
+  const newWb = XLSX.utils.book_new();
+  const usedNames = {};
+
+  mergeList.forEach(m => {
+    const file = files.find(f => f.id == m.fileId);
+    if (!file) return;
+    const ws = file.wb.Sheets[m.sheetName];
+    if (!ws) return;
+
+    // Resolve duplicate sheet names
+    let name = m.sheetName.replace(/[:\\\/\?\*\[\]]/g, '_').substring(0, 31);
+    if (usedNames[name] !== undefined) {
+      usedNames[name]++;
+      const suffix = `(${usedNames[name]})`;
+      name = name.substring(0, 31 - suffix.length) + suffix;
+    } else {
+      usedNames[name] = 0;
+    }
+
+    XLSX.utils.book_append_sheet(newWb, ws, name);
+  });
+
+  const outName = (document.getElementById('outputName').value.trim() || 'merged') + '.xlsx';
+  XLSX.writeFile(newWb, outName);
+  showToast(`"${outName}" 다운로드 완료 (${mergeList.length}개 시트)`);
+}
+
+// ─────────────────────────────────────────────
+// Clear all
+// ─────────────────────────────────────────────
+function clearAll() {
+  if (files.length === 0 && mergeList.length === 0) return;
+  if (!confirm('모든 파일과 선택 항목을 초기화할까요?')) return;
+  files.length = 0;
+  mergeList.length = 0;
+  renderFileList();
+  renderMergeList();
+  showToast('초기화되었습니다.');
+}
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
